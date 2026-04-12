@@ -1,15 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../theme.dart';
+import '../../../services/firebase_service.dart';
 
+/// NotificationsView — live Firestore notification stream with mark-as-read.
+/// Requirements 11.1–11.5.
 class NotificationsView extends StatelessWidget {
-  const NotificationsView({super.key});
+  final String uid;
+  const NotificationsView({super.key, required this.uid});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
+        _buildHeader(context),
+        const SizedBox(height: 32),
+        _buildNotificationsList(),
+      ],
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseService.getNotificationsStream(uid),
+      builder: (context, snap) {
+        final unread = (snap.data?.docs ?? [])
+            .where((d) => !(d['read'] as bool? ?? false))
+            .length;
+        return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Column(
@@ -17,204 +36,195 @@ class NotificationsView extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text('Notifications', style: Theme.of(context).textTheme.displayMedium),
+                    Text('Notifications',
+                        style:
+                            Theme.of(context).textTheme.displayMedium),
                     const SizedBox(width: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: AppTheme.primaryPurple, borderRadius: BorderRadius.circular(16)),
-                      child: const Text('2 New', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                    )
+                    if (unread > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                            color: AppTheme.primaryPurple,
+                            borderRadius: BorderRadius.circular(16)),
+                        child: Text('$unread New',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold)),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('Stay updated on volunteer activity, task progress, and system alerts.', style: Theme.of(context).textTheme.bodyMedium),
-              ],
-            ),
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.done_all, size: 18),
-                  label: const Text('Mark all read'),
-                ),
-                const SizedBox(width: 16),
-                IconButton(icon: const Icon(Icons.settings_outlined), onPressed: () {}),
-              ],
-            )
-          ],
-        ),
-        const SizedBox(height: 32),
-        
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                _tab('All Activity', true),
-                const SizedBox(width: 16),
-                _tab('Unread', false),
-                const SizedBox(width: 16),
-                _tab('Critical Updates', false),
+                const Text(
+                    'Stay updated on volunteer activity and task progress.',
+                    style: TextStyle(color: AppTheme.textGrey)),
               ],
             ),
             OutlinedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.filter_list, size: 16),
-              label: const Text('Filters'),
-              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+              onPressed: () => _markAllRead(snap.data?.docs ?? []),
+              icon: const Icon(Icons.done_all, size: 18),
+              label: const Text('Mark all read'),
             ),
           ],
-        ),
-        const SizedBox(height: 24),
-        
-        Container(
+        );
+      },
+    );
+  }
+
+  Widget _buildNotificationsList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseService.getNotificationsStream(uid),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.borderGrey)),
+            child: const Center(
+              child: Text('No notifications yet.',
+                  style: TextStyle(color: AppTheme.textGrey)),
+            ),
+          );
+        }
+        return Container(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.borderGrey),
-          ),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.borderGrey)),
           child: Column(
-            children: [
-              _notificationRow(
-                iconData: Icons.person_add_alt_1,
-                title: 'New Volunteer Application',
-                body: 'David Chen has applied for the "Lead Web Developer" position for your project: Social Impact Hub Rebuild.',
-                time: '12 mins ago',
-                isUnread: true,
-                hasActions: true,
-              ),
-              const Divider(height: 1),
-              _notificationRow(
-                iconData: Icons.emoji_events_outlined,
-                title: 'Milestone Completed',
-                body: 'The "Market Research Phase" for the Youth Mentorship Program has been marked as complete by Sarah Jenkins.',
-                time: '2 hours ago',
-                isUnread: true,
-                hasActions: true,
-              ),
-              const Divider(height: 1),
-              _notificationRow(
-                iconData: Icons.chat_bubble_outline,
-                title: 'New Message from Alex',
-                body: '"Hey there! I just uploaded the draft for the fundraising proposal. Let me know what you think when you have a moment."',
-                time: '5 hours ago',
-                isUnread: false,
-                hasActions: false,
-              ),
-              const Divider(height: 1),
-              _notificationRow(
-                iconData: Icons.data_usage,
-                title: 'Profile Engagement Update',
-                body: 'Your NGO profile was viewed by 15 potential volunteers this week! That\'s a 25% increase from last week.',
-                time: 'Yesterday',
-                isUnread: false,
-                hasActions: false,
-              ),
-              const Divider(height: 1),
-              _notificationRow(
-                iconData: Icons.person_search_outlined,
-                title: 'Volunteer Match Found',
-                body: 'We found a high-probability match: Elena Rodriguez has the "UX Design" skills you need for "The Green Path" project.',
-                time: '2 days ago',
-                isUnread: false,
-                hasActions: true,
-              ),
-            ],
+            children: docs.asMap().entries.map((entry) {
+              final i = entry.key;
+              final doc = entry.value;
+              final d = doc.data() as Map<String, dynamic>;
+              return Column(
+                children: [
+                  if (i > 0) const Divider(height: 1),
+                  _notificationRow(context, doc.id, d),
+                ],
+              );
+            }).toList(),
           ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Showing 5 notifications', style: TextStyle(color: AppTheme.textGrey, fontSize: 13)),
-            Row(
-              children: [
-                TextButton(onPressed: () {}, child: const Text('Notification Settings', style: TextStyle(color: AppTheme.textDark))),
-                const SizedBox(width: 16),
-                TextButton.icon(onPressed: () {}, icon: const Icon(Icons.delete_outline, size: 16, color: AppTheme.textDark), label: const Text('Clear History', style: TextStyle(color: AppTheme.textDark))),
-              ],
-            )
-          ],
-        )
-      ],
+        );
+      },
     );
   }
 
-  Widget _tab(String title, bool isSelected) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? AppTheme.primaryPurple.withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(title, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, color: isSelected ? AppTheme.primaryPurple : AppTheme.textDark)),
-    );
-  }
+  Widget _notificationRow(BuildContext context, String docId,
+      Map<String, dynamic> d) {
+    final isUnread = !(d['read'] as bool? ?? false);
+    final type = d['type'] as String? ?? 'assignment';
+    final title = d['title'] as String? ?? 'Notification';
+    final body = d['body'] as String? ?? '';
+    final createdAt = d['createdAt'];
+    String timeStr = '—';
+    if (createdAt is Timestamp) {
+      final dt = createdAt.toDate();
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 60) {
+        timeStr = '${diff.inMinutes} min ago';
+      } else if (diff.inHours < 24) {
+        timeStr = '${diff.inHours}h ago';
+      } else {
+        timeStr = '${diff.inDays}d ago';
+      }
+    }
 
-  Widget _notificationRow({required IconData iconData, required String title, required String body, required String time, required bool isUnread, required bool hasActions}) {
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             margin: const EdgeInsets.only(top: 8),
-            width: 8, height: 8,
-            decoration: BoxDecoration(color: isUnread ? AppTheme.primaryPurple : Colors.transparent, shape: BoxShape.circle),
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+                color: isUnread
+                    ? AppTheme.primaryPurple
+                    : Colors.transparent,
+                shape: BoxShape.circle),
           ),
           const SizedBox(width: 16),
           CircleAvatar(
             backgroundColor: AppTheme.backgroundLight,
             radius: 20,
-            child: Icon(iconData, color: AppTheme.textDark, size: 20),
+            child: Icon(_iconForType(type),
+                color: AppTheme.textDark, size: 20),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 8),
-                Text(body, style: const TextStyle(color: AppTheme.textDark, fontSize: 13, height: 1.4)),
-                if (hasActions) ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      ElevatedButton(
-                        onPressed: () {},
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
-                        child: const Row(
-                          children: [
-                            Text('Go to Task', style: TextStyle(fontSize: 12)),
-                            SizedBox(width: 4),
-                            Icon(Icons.open_in_new, size: 12),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), side: BorderSide.none, backgroundColor: AppTheme.backgroundLight),
-                        child: const Text('Review Application', style: TextStyle(fontSize: 12, color: AppTheme.textDark)),
-                      ),
-                      const SizedBox(width: 12),
-                      if (isUnread)
-                        TextButton(onPressed: () {}, child: const Text('Mark Read', style: TextStyle(fontSize: 12, color: AppTheme.textDark, fontWeight: FontWeight.bold))),
-                    ],
-                  )
-                ]
+                Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 6),
+                Text(body,
+                    style: const TextStyle(
+                        color: AppTheme.textDark,
+                        fontSize: 13,
+                        height: 1.4)),
+                if (isUnread) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () =>
+                        FirebaseService.markNotificationRead(docId),
+                    child: const Text('Mark Read',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textDark,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ],
             ),
           ),
           Row(
             children: [
-              const Icon(Icons.access_time, size: 12, color: AppTheme.textGrey),
+              const Icon(Icons.access_time,
+                  size: 12, color: AppTheme.textGrey),
               const SizedBox(width: 4),
-              Text(time, style: const TextStyle(color: AppTheme.textGrey, fontSize: 12)),
+              Text(timeStr,
+                  style: const TextStyle(
+                      color: AppTheme.textGrey, fontSize: 12)),
             ],
-          )
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _markAllRead(List<QueryDocumentSnapshot> docs) async {
+    for (final doc in docs) {
+      final isRead = (doc.data() as Map<String, dynamic>)['read']
+              as bool? ??
+          false;
+      if (!isRead) {
+        await FirebaseService.markNotificationRead(doc.id);
+      }
+    }
+  }
+
+  IconData _iconForType(String type) {
+    switch (type) {
+      case 'match_invite':
+        return Icons.person_search_outlined;
+      case 'assignment':
+        return Icons.assignment_outlined;
+      case 'status_change':
+        return Icons.update_outlined;
+      case 'rating_prompt':
+        return Icons.star_outline;
+      default:
+        return Icons.notifications_outlined;
+    }
   }
 }

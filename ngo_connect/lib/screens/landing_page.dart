@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
 import 'login_screen.dart';
 
@@ -100,7 +101,11 @@ class LandingPage extends StatelessWidget {
                         Row(
                           children: [
                             ElevatedButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                Navigator.push(context, MaterialPageRoute(
+                                  builder: (context) => const LoginScreen()
+                                ));
+                              },
                               style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20)),
                               child: const Row(
                                 children: [
@@ -112,7 +117,11 @@ class LandingPage extends StatelessWidget {
                             ),
                             const SizedBox(width: 16),
                             OutlinedButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                Navigator.push(context, MaterialPageRoute(
+                                  builder: (context) => const LoginScreen()
+                                ));
+                              },
                               style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20)),
                               child: const Text('Register NGO'),
                             ),
@@ -130,7 +139,7 @@ class LandingPage extends StatelessWidget {
                         color: Colors.grey[200],
                         borderRadius: BorderRadius.circular(24),
                         image: const DecorationImage(
-                          image: NetworkImage('https://images.unsplash.com/photo-1593113563332-afceed8f14af?auto=format&fit=crop&w=800&q=80'),
+                          image: NetworkImage('https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800&q=80'),
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -140,33 +149,86 @@ class LandingPage extends StatelessWidget {
               ),
             ),
 
-            // Stats Bar
-            Container(
-              width: double.infinity,
-              color: AppTheme.primaryPurple,
-              padding: const EdgeInsets.symmetric(vertical: 48),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildStatItem('12k+', 'NEEDS FULFILLED'),
-                  _buildStatItem('45k+', 'ACTIVE VOLUNTEERS'),
-                  _buildStatItem('850+', 'REGISTERED NGOS'),
-                  _buildStatItem('24/7', 'SUPPORT HOURS'),
-                ],
-              ),
-            ),
+            // Stats Bar — live counts from Firestore (Requirements 1.3, 12.5)
+            const _LiveStatsBar(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatItem(String value, String label) {
+}
+
+/// Fetches live counts from Firestore and displays them in the stats bar.
+/// Requirements 1.3, 12.5: no hardcoded placeholder values.
+class _LiveStatsBar extends StatelessWidget {
+  const _LiveStatsBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, int>>(
+      future: _fetchStats(),
+      builder: (context, snap) {
+        final stats = snap.data;
+        return Container(
+          width: double.infinity,
+          color: AppTheme.primaryPurple,
+          padding: const EdgeInsets.symmetric(vertical: 48),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _statItem(
+                stats != null ? '${stats['fulfilled']}+' : '—',
+                'NEEDS FULFILLED',
+              ),
+              _statItem(
+                stats != null ? '${stats['volunteers']}+' : '—',
+                'ACTIVE VOLUNTEERS',
+              ),
+              _statItem(
+                stats != null ? '${stats['ngos']}+' : '—',
+                'REGISTERED NGOS',
+              ),
+              _statItem(
+                stats != null ? '${stats['tasks']}+' : '—',
+                'TASKS COMPLETED',
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, int>> _fetchStats() async {
+    final db = FirebaseFirestore.instance;
+    final results = await Future.wait([
+      db.collection('needs').where('status', isEqualTo: 'closed').count().get(),
+      db.collection('users').where('role', isEqualTo: 'volunteer').count().get(),
+      db.collection('ngos').count().get(),
+      db.collection('task_assignments').where('status', isEqualTo: 'closed').count().get(),
+    ]);
+    return {
+      'fulfilled': results[0].count ?? 0,
+      'volunteers': results[1].count ?? 0,
+      'ngos': results[2].count ?? 0,
+      'tasks': results[3].count ?? 0,
+    };
+  }
+
+  Widget _statItem(String value, String label) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(value,
+            style: const TextStyle(
+                fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
         const SizedBox(height: 8),
-        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white70, letterSpacing: 1.2)),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+                letterSpacing: 1.2)),
       ],
     );
   }

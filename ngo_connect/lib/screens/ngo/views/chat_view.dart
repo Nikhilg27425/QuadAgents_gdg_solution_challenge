@@ -1,313 +1,398 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../services/firebase_service.dart';
 import '../../../theme.dart';
 
-class ChatView extends StatelessWidget {
-  const ChatView({super.key});
+/// ChatView — per-task group chat backed by Firestore Realtime.
+///
+/// Requirements 8.1–8.5:
+///   8.1  Chat room auto-created when 2+ volunteers are assigned.
+///   8.2  Messages stored in chat_rooms/{taskId}/messages with sender info.
+///   8.3  Messages displayed in chronological order via live stream.
+///   8.4  Auto-scroll to latest message on new arrival.
+///   8.5  Access control: only participantIds members may read messages.
+class ChatView extends StatefulWidget {
+  /// The task/need id that identifies the chat room.
+  final String taskId;
+
+  /// Display name of the task (shown in the header).
+  final String taskTitle;
+
+  const ChatView({
+    super.key,
+    required this.taskId,
+    required this.taskTitle,
+  });
+
+  @override
+  State<ChatView> createState() => _ChatViewState();
+}
+
+class _ChatViewState extends State<ChatView> {
+  final TextEditingController _msgController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  /// `null`  = still loading
+  /// `true`  = access granted
+  /// `false` = access denied (403)
+  bool? _accessGranted;
+
+  String get _currentUid =>
+      FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  String get _currentName =>
+      FirebaseAuth.instance.currentUser?.displayName ??
+      FirebaseAuth.instance.currentUser?.email ??
+      'Volunteer';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAccess();
+  }
+
+  @override
+  void dispose() {
+    _msgController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // ── Access control (Requirement 8.5) ──────────────────────────────────────
+
+  /// Reads the chat_rooms document and verifies the current user is a participant.
+  Future<void> _checkAccess() async {
+    final uid = _currentUid;
+    if (uid.isEmpty) {
+      setState(() => _accessGranted = false);
+      return;
+    }
+
+    final doc = await FirebaseFirestore.instance
+        .collection('chat_rooms')
+        .doc(widget.taskId)
+        .get();
+
+    if (!doc.exists) {
+      // Room doesn't exist yet — allow access so the first message can create it.
+      setState(() => _accessGranted = true);
+      return;
+    }
+
+    final participants =
+        List<String>.from(doc.data()?['participantIds'] ?? []);
+    setState(() => _accessGranted = participants.contains(uid));
+  }
+
+  // ── Send message (Requirement 8.2) ────────────────────────────────────────
+
+  Future<void> _sendMessage(String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+
+    _msgController.clear();
+
+    await FirebaseService.sendMessage(widget.taskId, {
+      'senderUid': _currentUid,
+      'senderName': _currentName,
+      'text': trimmed,
+    });
+  }
+
+  // ── Auto-scroll (Requirement 8.4) ─────────────────────────────────────────
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    if (_accessGranted == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_accessGranted == false) {
+      return _buildAccessDenied();
+    }
+
+    return _buildChatUI();
+  }
+
+  Widget _buildAccessDenied() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.lock_outline, size: 64, color: AppTheme.textGrey),
+          const SizedBox(height: 16),
+          Text(
+            'Access Denied',
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(color: AppTheme.errorRed),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'You are not a participant in this chat room.',
+            style: TextStyle(color: AppTheme.textGrey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatUI() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.borderGrey),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Column(
         children: [
-          // Contacts List
-          Expanded(
-            flex: 3,
-            child: Container(
-              decoration: const BoxDecoration(
-                border: Border(right: BorderSide(color: AppTheme.borderGrey)),
-              ),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Messages', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        IconButton(icon: const Icon(Icons.filter_list, size: 20), onPressed: () {}),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search conversations...',
-                        hintStyle: const TextStyle(fontSize: 13),
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: AppTheme.borderGrey)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Expanded(
-                    child: ListView(
-                      children: [
-                        _contactRow('Sarah Jenkins', '2:45 PM', 'Re: Food Distribution Drive', 'I\'ve uploaded the delivery receip...', true, true),
-                        const Divider(height: 1),
-                        _contactRow('Marcus Thorne', '1:20 PM', 'Re: Community Park Cleanup', 'Will be there in 15 minutes! Traffic is...', false, false),
-                        const Divider(height: 1),
-                        _contactRow('Elena Rodriguez', 'Yesterday', 'Re: Elderly Tech Support', 'Thanks for the opportunity. Looking...', false, false),
-                        const Divider(height: 1),
-                        _contactRow('James Chen', 'Oct 20', 'Re: Urban Garden Project', 'Do we need to bring our own gloves...', false, false),
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            ),
-          ),
-          
-          // Chat Area
-          Expanded(
-            flex: 7,
-            child: Column(
-              children: [
-                // Chat Header
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppTheme.borderGrey))),
-                  child: Row(
-                    children: [
-                      const CircleAvatar(radius: 20, backgroundColor: AppTheme.borderGrey, child: Icon(Icons.person, color: Colors.grey)),
-                      const SizedBox(width: 16),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Sarah Jenkins', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            Text('Active now', style: TextStyle(fontSize: 12, color: AppTheme.successGreen, fontWeight: FontWeight.w500)),
-                          ],
-                        ),
-                      ),
-                      IconButton(icon: const Icon(Icons.phone_outlined, color: AppTheme.textGrey), onPressed: () {}),
-                      IconButton(icon: const Icon(Icons.videocam_outlined, color: AppTheme.textGrey), onPressed: () {}),
-                      IconButton(icon: const Icon(Icons.info_outline, color: AppTheme.textGrey), onPressed: () {}),
-                      IconButton(icon: const Icon(Icons.more_vert, color: AppTheme.textGrey), onPressed: () {}),
-                    ],
-                  ),
-                ),
-                
-                // Context Banner
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                  color: AppTheme.primaryPurple.withOpacity(0.05),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: AppTheme.primaryPurple.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                        child: const Text('Active Task', style: TextStyle(color: AppTheme.primaryPurple, fontSize: 11, fontWeight: FontWeight.bold)),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text('Food Distribution Drive • Deadline: Oct 24', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                      ),
-                      TextButton(onPressed: () {}, child: const Text('View Details')),
-                    ],
-                  ),
-                ),
-                
-                // Messages Body
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(32),
-                    children: [
-                      const Center(child: Text('Yesterday', style: TextStyle(fontSize: 11, color: AppTheme.textGrey))),
-                      const SizedBox(height: 24),
-                      _myMessage('Hi Sarah! Just checking in on the progress for the Sunday food drive. Are we all set with the logistics?', '10:15 AM'),
-                      const SizedBox(height: 24),
-                      _theirMessage('Hey! Yes, everything is on track. I\'ve confirmed with the 5 volunteers for the morning shift. We\'ll be at the warehouse by 8 AM.', '10:20 AM'),
-                      const SizedBox(height: 32),
-                      const Center(child: Text('Today', style: TextStyle(fontSize: 11, color: AppTheme.textGrey))),
-                      const SizedBox(height: 24),
-                      _myMessage('That\'s great. I\'ve sent over the final route map for the delivery vans.', '2:30 PM'),
-                      const SizedBox(height: 24),
-                      _theirImageMessage('10:45 AM'),
-                    ],
-                  ),
-                ),
-                
-                // Input Area
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    border: Border(top: BorderSide(color: AppTheme.borderGrey)),
-                    borderRadius: BorderRadius.only(bottomRight: Radius.circular(16)),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(color: AppTheme.backgroundLight, borderRadius: BorderRadius.circular(24), border: Border.all(color: AppTheme.borderGrey)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        child: Row(
-                          children: [
-                            IconButton(icon: const Icon(Icons.attach_file, color: AppTheme.textGrey), onPressed: () {}),
-                            IconButton(icon: const Icon(Icons.image_outlined, color: AppTheme.textGrey), onPressed: () {}),
-                            const Expanded(
-                              child: TextField(
-                                decoration: InputDecoration(hintText: 'Type a message...', border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, fillColor: Colors.transparent),
-                              ),
-                            ),
-                            IconButton(icon: const Icon(Icons.sentiment_satisfied_outlined, color: AppTheme.textGrey), onPressed: () {}),
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(color: AppTheme.backgroundLight, shape: BoxShape.circle),
-                              child: const Icon(Icons.send, color: AppTheme.textGrey, size: 20),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _quickReply('Confirm shift'),
-                            _quickReply('I\'m running late'),
-                            _quickReply('Request resource'),
-                            _quickReply('Task completed!'),
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          )
+          _buildHeader(),
+          Expanded(child: _buildMessageList()),
+          _buildQuickReplies(),
+          _buildInputBar(),
         ],
       ),
     );
   }
 
-  Widget _contactRow(String name, String time, String sub, String msg, bool isUnread, bool isSelected) {
+  Widget _buildHeader() {
     return Container(
-      color: isSelected ? AppTheme.primaryPurple.withOpacity(0.05) : Colors.transparent,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppTheme.borderGrey)),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(radius: 24, backgroundColor: AppTheme.borderGrey, child: Icon(Icons.person, color: isSelected ? AppTheme.primaryPurple : Colors.grey)),
-           const SizedBox(width: 16),
-           Expanded(
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryPurple.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.group, color: AppTheme.primaryPurple, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(name, style: TextStyle(fontWeight: isUnread ? FontWeight.bold : FontWeight.w600, fontSize: 14)),
-                    Text(time, style: TextStyle(fontSize: 11, color: isUnread ? AppTheme.textDark : AppTheme.textGrey, fontWeight: isUnread ? FontWeight.bold : FontWeight.normal)),
-                  ],
+                Text(
+                  widget.taskTitle,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
-                Text(sub, style: TextStyle(fontSize: 12, color: AppTheme.primaryPurple, fontWeight: isUnread ? FontWeight.bold : FontWeight.w500)),
-                const SizedBox(height: 4),
-                Text(msg, style: TextStyle(fontSize: 12, color: AppTheme.textGrey), maxLines: 1, overflow: TextOverflow.ellipsis),
+                const Text(
+                  'Group Chat',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textGrey),
+                ),
               ],
             ),
-           ),
-           if (isUnread) ...[
-             const SizedBox(width: 12),
-             Container(
-               width: 18, height: 18,
-               decoration: const BoxDecoration(color: AppTheme.primaryPurple, shape: BoxShape.circle),
-               child: const Center(child: Text('2', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
-             )
-           ]
+          ),
         ],
       ),
     );
   }
 
-  Widget _myMessage(String text, String time) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Container(
+  // ── Message list (Requirements 8.3 + 8.4) ─────────────────────────────────
+
+  Widget _buildMessageList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseService.getMessagesStream(widget.taskId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+
+        // Auto-scroll whenever new messages arrive.
+        if (docs.isNotEmpty) {
+          _scrollToBottom();
+        }
+
+        if (docs.isEmpty) {
+          return const Center(
+            child: Text(
+              'No messages yet. Start the conversation!',
+              style: TextStyle(color: AppTheme.textGrey),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          controller: _scrollController,
           padding: const EdgeInsets.all(16),
-          constraints: const BoxConstraints(maxWidth: 500),
-          decoration: const BoxDecoration(
-            color: AppTheme.primaryPurple,
-            borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16), bottomLeft: Radius.circular(16)),
-          ),
-          child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4)),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisSize: MainAxisSize.min,
+          itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final data = docs[i].data() as Map<String, dynamic>;
+            final isMine = data['senderUid'] == _currentUid;
+            return _buildMessageBubble(data, isMine);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMessageBubble(Map<String, dynamic> data, bool isMine) {
+    final text = data['text'] as String? ?? '';
+    final senderName = data['senderName'] as String? ?? 'Unknown';
+    final sentAt = (data['sentAt'] as Timestamp?)?.toDate();
+    final timeStr = sentAt != null
+        ? '${sentAt.hour.toString().padLeft(2, '0')}:${sentAt.minute.toString().padLeft(2, '0')}'
+        : '';
+
+    return Align(
+      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          crossAxisAlignment:
+              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Text(time, style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
-            const SizedBox(width: 4),
-            const Icon(Icons.done_all, size: 14, color: AppTheme.primaryPurple),
+            if (!isMine)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 2),
+                child: Text(
+                  senderName,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textGrey,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: isMine
+                    ? AppTheme.primaryPurple
+                    : AppTheme.backgroundLight,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isMine ? 16 : 4),
+                  bottomRight: Radius.circular(isMine ? 4 : 16),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    text,
+                    style: TextStyle(
+                        color: isMine ? Colors.white : AppTheme.textDark),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: isMine ? Colors.white70 : AppTheme.textGrey),
+                  ),
+                ],
+              ),
+            ),
           ],
-        )
-      ],
-    );
-  }
-
-  Widget _theirMessage(String text, String time) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          constraints: const BoxConstraints(maxWidth: 500),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: AppTheme.borderGrey),
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16), bottomRight: Radius.circular(16)),
-          ),
-          child: Text(text, style: const TextStyle(color: AppTheme.textDark, fontSize: 14, height: 1.4)),
         ),
-        const SizedBox(height: 8),
-        Text(time, style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
-      ],
+      ),
     );
   }
 
-  Widget _theirImageMessage(String time) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          height: 150,
-          width: 250,
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16), bottomRight: Radius.circular(16)),
-            image: const DecorationImage(
-              image: NetworkImage('https://images.unsplash.com/photo-1593113563332-afceed8f14af?auto=format&fit=crop&w=400&q=80'),
-              fit: BoxFit.cover,
+  // ── Quick replies ──────────────────────────────────────────────────────────
+
+  Widget _buildQuickReplies() {
+    const replies = [
+      'Confirm shift',
+      'Running late',
+      'Task completed!',
+      'Need help',
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: replies
+              .map((t) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: OutlinedButton(
+                      onPressed: () => _sendMessage(t),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(t, style: const TextStyle(fontSize: 12)),
+                    ),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+  }
+
+  // ── Input bar ──────────────────────────────────────────────────────────────
+
+  Widget _buildInputBar() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppTheme.borderGrey)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _msgController,
+              textInputAction: TextInputAction.send,
+              onSubmitted: _sendMessage,
+              decoration: InputDecoration(
+                hintText: 'Type a message...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: const BorderSide(color: AppTheme.borderGrey),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: const BorderSide(color: AppTheme.borderGrey),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(time, style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
-      ],
-    );
-  }
-
-  Widget _quickReply(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8.0),
-      child: OutlinedButton(
-        onPressed: () {},
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          side: const BorderSide(color: AppTheme.borderGrey),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        ),
-        child: Text(text, style: const TextStyle(fontSize: 12, color: AppTheme.textDark)),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => _sendMessage(_msgController.text),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: const BoxDecoration(
+                color: AppTheme.primaryPurple,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.send, color: Colors.white, size: 18),
+            ),
+          ),
+        ],
       ),
     );
   }

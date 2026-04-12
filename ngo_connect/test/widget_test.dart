@@ -1,30 +1,58 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Basic smoke test for the NGO Connect app.
+// We test pure utility functions rather than the full widget tree,
+// since the app requires Firebase initialisation which is not available
+// in the unit-test environment.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:ngo_connect/main.dart';
+import 'package:ngo_connect/utils/validators.dart';
+import 'package:ngo_connect/models/need_card.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('Validator smoke tests', () {
+    test('validateNgoRegistration accepts a complete payload', () {
+      final errors = validateNgoRegistration({
+        'name': 'Test NGO',
+        'type': 'Education',
+        'address': '123 Main St',
+        'contactEmail': 'test@ngo.org',
+        'coordinatorName': 'Jane Doe',
+      });
+      expect(errors, isEmpty);
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('validateNgoRegistration rejects a payload with a blank field', () {
+      final errors = validateNgoRegistration({
+        'name': '',
+        'type': 'Education',
+        'address': '123 Main St',
+        'contactEmail': 'test@ngo.org',
+        'coordinatorName': 'Jane Doe',
+      });
+      expect(errors, contains('name'));
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('sortNeeds returns an empty list for empty input', () {
+      expect(sortNeeds([]), isEmpty);
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('sortNeeds orders by urgency descending', () {
+      final needs = [
+        NeedCard(
+          id: '1', ngoId: 'n', title: 'A', description: '', category: '',
+          skills: [], urgency: 2, deadline: DateTime(2025),
+          location: '', lat: 0, lng: 0, status: 'open',
+          applicantCount: 0, createdAt: DateTime(2024),
+        ),
+        NeedCard(
+          id: '2', ngoId: 'n', title: 'B', description: '', category: '',
+          skills: [], urgency: 5, deadline: DateTime(2025),
+          location: '', lat: 0, lng: 0, status: 'open',
+          applicantCount: 0, createdAt: DateTime(2024),
+        ),
+      ];
+      final sorted = sortNeeds(needs);
+      expect(sorted.first.urgency, equals(5));
+      expect(sorted.last.urgency, equals(2));
+    });
   });
 }

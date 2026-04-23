@@ -220,16 +220,19 @@ class MatchingService {
         (b['finalScore'] as double).compareTo(a['finalScore'] as double));
     final top10 = scored.take(10).toList();
 
-    // Re-ranking via backend
+    // Re-ranking via backend (best-effort, falls back to rule-based top10)
     List<Map<String, dynamic>> finalMatches = top10;
     try {
       final response = await http.post(
-        Uri.parse('$_backendUrl/match/parse-text'),
+        Uri.parse('$_backendUrl/match/volunteer'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'text': jsonEncode(top10)}),
+        body: jsonEncode({'volunteer_id': 'system', 'matches': top10}),
       );
       if (response.statusCode == 200) {
-        // fallback — backend reranking not critical here, use top10
+        final data = jsonDecode(response.body);
+        if (data['matches'] != null) {
+          finalMatches = List<Map<String, dynamic>>.from(data['matches']);
+        }
       }
     } catch (_) {
       // Fall back to rule-based ranking

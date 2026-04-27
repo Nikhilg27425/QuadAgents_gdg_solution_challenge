@@ -230,4 +230,4 @@ firebase deploy
 
 ---
 
-<p align="center">Built with ❤️ for GDG Solution Challenge 2025</p>
+<p align="center">Built with ❤️ for GDG Solution Challenge 2026</p>

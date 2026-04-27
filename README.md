@@ -1,4 +1,4 @@
-# 🌐 NGO Connect — AI-Powered Volunteer Matching Platform
+# NGO Connect — AI-Powered Volunteer Matching Platform
 
 > Built for **Google Developer Groups Solution Challenge**  
 > Team **QuadAgents**
@@ -7,7 +7,7 @@ NGO Connect bridges the gap between NGOs and volunteers using AI-powered matchin
 
 ---
 
-## 🚀 Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -23,7 +23,7 @@ NGO Connect bridges the gap between NGOs and volunteers using AI-powered matchin
 
 ---
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ```
 Flutter Web (Frontend)
@@ -41,41 +41,41 @@ Flutter Web (Frontend)
 
 ---
 
-## 👥 Two Portals, One Platform
+## Two Portals, One Platform
 
-### 🏢 NGO Dashboard
-### 🙋 Volunteer Dashboard
+### NGO Dashboard
+### Volunteer Dashboard
 
 Both portals share the same Firestore backend — actions on one side are instantly reflected on the other in real time.
 
 ---
 
-## 🏢 NGO Portal — Features
+## NGO Portal — Features
 
-### 1. 📊 Overview Dashboard
+### 1. Overview Dashboard
 - Live metrics: total needs posted, open needs, fulfilled needs, active volunteers
 - Quick-access navigation to all sections
 
-### 2. 📄 Document Hub
+### 2. Document Hub
 - Upload PDF/CSV survey reports (max 10 MB)
 - **AI Survey Parser** — paste field survey text, Groq AI extracts structured volunteer needs automatically
 - Extracted needs can be published directly to the platform with one click
 - Uploaded documents listed with filename, size, and upload date
 
-### 3. ➕ Create Need
+### 3. Create Need
 - Full form: title, description, category, urgency (Low → Immediate), skills required, deadline, location
 - **AI Pre-fill** — paste any report text and AI auto-populates all fields
 - Location geocoded to lat/lng via Photon OSM (through backend to avoid CORS)
 - On publish: AI matching runs automatically against all registered volunteers, top 5 matched volunteers receive notifications
 
-### 4. 📋 Manage Needs
+### 4. Manage Needs
 - Live stream of all posted needs from Firestore
 - Filter by status: All / Open / In-Progress / Closed
 - Sorted by urgency (descending) then deadline (ascending)
 - Edit title, description, urgency inline
 - Close any open need
 
-### 5. 🗂️ Task Board (Kanban)
+### 5. Task Board (Kanban)
 - Real-time Kanban board of all volunteer assignments
 - Columns: **Invited → Accepted → In Progress → Reported → Verified → Closed**
 - Each card shows volunteer name, need title, and invite date
@@ -84,23 +84,23 @@ Both portals share the same Firestore backend — actions on one side are instan
 - When **Verified**: NGO receives a rating prompt notification
 - When **Closed**: volunteer is automatically notified
 
-### 6. 📈 Analytics Dashboard
+### 6. Analytics Dashboard
 - Fulfillment trends chart (open vs fulfilled needs by month)
 - Need status donut chart (open / in-progress / fulfilled breakdown)
 - Top 5 needs by applicant count
 - Date range filter
 - CSV export of all needs data
 
-### 7. 🔔 Notifications
+### 7. Notifications
 - Receive alerts when volunteers accept or decline tasks
 - Status change notifications for every assignment transition
 - Rating prompts when tasks are verified
 
 ---
 
-## 🙋 Volunteer Portal — Features
+## Volunteer Portal — Features
 
-### 1. 🔍 Explore Needs
+### 1. Explore Needs
 - Live feed of all open needs from Firestore
 - **List View** — responsive grid (1/2/3 columns based on screen width)
 - **Map View** — real OpenStreetMap with urgency-colored pins (green = low, orange = medium, red = high)
@@ -108,7 +108,7 @@ Both portals share the same Firestore backend — actions on one side are instan
 - Filter by category (Technology, Education, Medical, Environment, Legal, Community)
 - Tap any map pin → popup summary card with "View Details" button
 
-### 2. 📌 Task Detail & Apply
+### 2. Task Detail & Apply
 - Full need details: title, description, required skills, category, deadline, urgency
 - NGO name and coordinator contact point
 - **Embedded OSM map** showing the coordinator/need location (geocoded automatically)
@@ -116,7 +116,7 @@ Both portals share the same Firestore backend — actions on one side are instan
 - **Decline Task** — marks as declined, notifies NGO to offer to next ranked volunteer
 - Expired deadline detection — accept button disabled automatically
 
-### 3. 🗂️ My Tasks (Kanban)
+### 3. My Tasks (Kanban)
 - Personal Kanban board of all accepted assignments
 - Columns: **Invited → Accepted → In Progress → Reported → Verified → Closed**
 - Volunteer can advance their own tasks:
@@ -125,7 +125,7 @@ Both portals share the same Firestore backend — actions on one side are instan
 - Declined tasks filtered out automatically
 - Completed tasks show a "Completed" badge
 
-### 4. 👤 Profile
+### 4. Profile
 - Select skills (used for AI matching — Jaccard similarity scoring)
 - Select languages and preferred causes
 - Set availability (Weekdays / Weekends / Evenings / Full-time / Flexible)
@@ -134,13 +134,13 @@ Both portals share the same Firestore backend — actions on one side are instan
 - Live stats: average rating, tasks completed, skills count
 - Saving profile re-runs AI matching against all open needs
 
-### 5. 🔔 Notifications
+### 5. Notifications
 - Match invites when a new need matches your skills (top 5 only)
 - Status change alerts from NGO (verified, closed, etc.)
 
 ---
 
-## 🔗 NGO ↔ Volunteer Interactions
+## NGO ↔ Volunteer Interactions
 
 | Action | Trigger | Effect on Other Side |
 |---|---|---|
@@ -154,7 +154,7 @@ Both portals share the same Firestore backend — actions on one side are instan
 
 ---
 
-## 🤖 AI Features
+## AI Features
 
 ### Groq LLaMA 3.3 70B powers:
 - **Need extraction** from raw survey/report text

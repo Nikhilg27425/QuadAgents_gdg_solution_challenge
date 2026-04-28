@@ -178,91 +178,116 @@ class MyTasksView extends StatelessWidget {
     final nextStatus = _nextStatus(currentStatus);
     final canAdvance = nextStatus != null && currentStatus != 'closed';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderGrey),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4)
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                    color: AppTheme.primaryPurple.withOpacity(0.1),
-                    shape: BoxShape.circle),
-                child: const Icon(Icons.assignment_outlined,
-                    size: 14, color: AppTheme.primaryPurple),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Need: ${needId.length > 12 ? '${needId.substring(0, 12)}…' : needId}',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text('Invited: $dateStr',
-              style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
-          const SizedBox(height: 4),
-          _buildNeedTitle(needId),
-
-          if (canAdvance) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () =>
-                    _advanceStatus(context, doc.id, currentStatus),
-                style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    textStyle: const TextStyle(fontSize: 12)),
-                child: Text('→ ${_columnLabel(nextStatus!)}'),
-              ),
-            ),
-          ],
-
-          if (currentStatus == 'closed') ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                  color: AppTheme.successGreen.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6)),
-              child: const Text('Completed',
-                  style: TextStyle(
-                      color: AppTheme.successGreen,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNeedTitle(String needId) {
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance.collection('needs').doc(needId).get(),
       builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox.shrink();
         final data = snap.data?.data() as Map<String, dynamic>?;
-        final title = data?['title'] as String? ?? needId;
-        return Text(title,
-            style: const TextStyle(fontSize: 12, color: AppTheme.textDark),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis);
+        final title = data?['title'] as String? ?? '';
+        final category = data?['category'] as String? ?? '';
+        final location = data?['location'] as String? ?? '';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.borderGrey),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4)
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                        color: AppTheme.primaryPurple.withOpacity(0.1),
+                        shape: BoxShape.circle),
+                    child: const Icon(Icons.assignment_outlined,
+                        size: 14, color: AppTheme.primaryPurple),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: snap.connectionState == ConnectionState.waiting
+                        ? Container(
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: AppTheme.borderGrey,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          )
+                        : Text(
+                            title.isNotEmpty ? title : 'Unnamed Need',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                  ),
+                ],
+              ),
+              if (category.isNotEmpty || location.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (category.isNotEmpty) ...[
+                      const Icon(Icons.category_outlined, size: 11, color: AppTheme.textGrey),
+                      const SizedBox(width: 3),
+                      Text(category,
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                      const SizedBox(width: 10),
+                    ],
+                    if (location.isNotEmpty) ...[
+                      const Icon(Icons.location_on_outlined, size: 11, color: AppTheme.textGrey),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(location,
+                            style: const TextStyle(fontSize: 11, color: AppTheme.textGrey),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              const SizedBox(height: 4),
+              Text('Invited: $dateStr',
+                  style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+
+              if (canAdvance) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () =>
+                        _advanceStatus(context, doc.id, currentStatus),
+                    style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        textStyle: const TextStyle(fontSize: 12)),
+                    child: Text('→ ${_columnLabel(nextStatus!)}'),
+                  ),
+                ),
+              ],
+
+              if (currentStatus == 'closed') ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: AppTheme.successGreen.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6)),
+                  child: const Text('Completed',
+                      style: TextStyle(
+                          color: AppTheme.successGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ],
+          ),
+        );
       },
     );
   }

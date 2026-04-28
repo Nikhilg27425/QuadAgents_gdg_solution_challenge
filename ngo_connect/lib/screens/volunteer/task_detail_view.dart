@@ -120,6 +120,9 @@ class _TaskDetailViewState extends State<TaskDetailView> {
       // Advance to accepted
       await FirebaseService.updateAssignmentStatus(assignmentId, 'accepted');
 
+      // Create/join chat room for this task (volunteer + NGO)
+      await FirebaseService.ensureChatRoom(widget.need.id, [uid, widget.need.ngoId]);
+
       // Notify NGO admin (Requirement 6.2)
       await FirebaseService.createNotification(widget.need.ngoId, {
         'type': 'assignment',

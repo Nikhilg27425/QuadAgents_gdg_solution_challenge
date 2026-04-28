@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../theme.dart';
 import 'views/ngo_overview_view.dart';
 import 'create_need_view.dart';
@@ -7,6 +8,7 @@ import 'views/needs_management_view.dart';
 import 'views/kanban_board_view.dart';
 import 'views/analytics_view.dart';
 import 'views/notifications_view.dart';
+import 'views/chat_view.dart';
 
 class NgoDashboard extends StatefulWidget {
   const NgoDashboard({super.key});
@@ -23,27 +25,22 @@ class _NgoDashboardState extends State<NgoDashboard> {
     _NavItem(Icons.add_circle_outline, 'Create Need', 1),
     _NavItem(Icons.list_alt_outlined, 'Manage Needs', 2),
     _NavItem(Icons.view_kanban_outlined, 'Task Board', 3),
-    _NavItem(Icons.bar_chart_outlined, 'Analytics', 4),
-    _NavItem(Icons.notifications_outlined, 'Notifications', 5),
+    _NavItem(Icons.chat_bubble_outline, 'Chat', 4),
+    _NavItem(Icons.bar_chart_outlined, 'Analytics', 5),
+    _NavItem(Icons.notifications_outlined, 'Notifications', 6),
   ];
 
   Widget _buildCurrentView() {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     switch (_selectedIndex) {
-      case 0:
-        return NgoOverviewView(ngoId: uid);
-      case 1:
-        return CreateNeedView(ngoId: uid);
-      case 2:
-        return NeedsManagementView(ngoId: uid);
-      case 3:
-        return KanbanBoardView(ngoId: uid);
-      case 4:
-        return AnalyticsView(ngoId: uid);
-      case 5:
-        return NotificationsView(uid: uid);
-      default:
-        return NgoOverviewView(ngoId: uid);
+      case 0: return NgoOverviewView(ngoId: uid);
+      case 1: return CreateNeedView(ngoId: uid);
+      case 2: return NeedsManagementView(ngoId: uid);
+      case 3: return KanbanBoardView(ngoId: uid);
+      case 4: return _NgoChatRoomsView(ngoId: uid);
+      case 5: return AnalyticsView(ngoId: uid);
+      case 6: return NotificationsView(uid: uid);
+      default: return NgoOverviewView(ngoId: uid);
     }
   }
 
@@ -213,4 +210,131 @@ class _NavItem {
   final String label;
   final int index;
   const _NavItem(this.icon, this.label, this.index);
+}
+
+/// NGO Chat Rooms — lists all chat rooms for this NGO's needs.
+class _NgoChatRoomsView extends StatefulWidget {
+  final String ngoId;
+  const _NgoChatRoomsView({required this.ngoId});
+
+  @override
+  State<_NgoChatRoomsView> createState() => _NgoChatRoomsViewState();
+}
+
+class _NgoChatRoomsViewState extends State<_NgoChatRoomsView> {
+  String? _selectedRoomId;
+  String? _selectedRoomTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_selectedRoomId != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextButton.icon(
+            onPressed: () => setState(() => _selectedRoomId = null),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Back to rooms'),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: MediaQuery.of(context).size.height - 200,
+            child: ChatView(
+              taskId: _selectedRoomId!,
+              taskTitle: _selectedRoomTitle ?? _selectedRoomId!,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Chat Rooms', style: Theme.of(context).textTheme.displayMedium),
+        const SizedBox(height: 4),
+        const Text('Chat with volunteers assigned to your needs.',
+            style: TextStyle(color: AppTheme.textGrey)),
+        const SizedBox(height: 24),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('chat_rooms')
+              .where('participantIds', arrayContains: widget.ngoId)
+              .snapshots(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final rooms = snap.data?.docs ?? [];
+            if (rooms.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(48),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.borderGrey)),
+                child: const Column(children: [
+                  Icon(Icons.chat_bubble_outline, size: 48, color: AppTheme.textGrey),
+                  SizedBox(height: 16),
+                  Text('No chat rooms yet',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text('Chat rooms are created when volunteers accept your tasks.',
+                      style: TextStyle(color: AppTheme.textGrey),
+                      textAlign: TextAlign.center),
+                ]),
+              );
+            }
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: rooms.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, i) {
+                final data = rooms[i].data() as Map<String, dynamic>;
+                final roomId = rooms[i].id;
+                final needId = data['needId'] as String? ?? roomId;
+                return FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance.collection('needs').doc(needId).get(),
+                  builder: (context, snap) {
+                    final d = snap.data?.data() as Map<String, dynamic>?;
+                    final title = d?['title'] as String? ?? 'Task $needId';
+                    return InkWell(
+                      onTap: () => setState(() {
+                        _selectedRoomId = roomId;
+                        _selectedRoomTitle = title;
+                      }),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.borderGrey),
+                        ),
+                        child: Row(children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                                color: AppTheme.primaryPurple.withOpacity(0.1),
+                                shape: BoxShape.circle),
+                            child: const Icon(Icons.group,
+                                color: AppTheme.primaryPurple, size: 20),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(child: Text(title,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
+                          const Icon(Icons.chevron_right, color: AppTheme.textGrey),
+                        ]),
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
 }

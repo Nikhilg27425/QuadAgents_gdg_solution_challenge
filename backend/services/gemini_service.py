@@ -1,28 +1,21 @@
-from groq import Groq
+from google import genai
 from dotenv import load_dotenv
 import os, json, re
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL = "llama-3.3-70b-versatile"
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+MODEL = "gemini-2.5-flash"
 
 def _chat(prompt: str) -> str:
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-    )
-    text = response.choices[0].message.content or ""
-    # Strip markdown code fences
-    text = re.sub(r"```(?:json)?", "", text).replace("```", "").strip()
-    return text
+    response = client.models.generate_content(model=MODEL, contents=prompt)
+    text = response.text or ""
+    return re.sub(r"```(?:json)?", "", text).replace("```", "").strip()
 
 def _safe_json(text: str, fallback):
     try:
         return json.loads(text)
     except Exception:
-        # Try to extract first JSON array or object from text
         match = re.search(r'(\[.*\]|\{.*\})', text, re.DOTALL)
         if match:
             try:

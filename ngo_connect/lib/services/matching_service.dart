@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 
 class MatchingService {
   static final _db = FirebaseFirestore.instance;
-  static const _backendUrl = 'http://localhost:8000';
+  static const _backendUrl = 'https://quadagents-gdg-solution-challenge.onrender.com';
 
   // Rule-based + Gemini re-ranked matching: volunteer → open needs
   static Future<List<Map<String, dynamic>>> matchVolunteerToNeeds(

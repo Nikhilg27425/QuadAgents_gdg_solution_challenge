@@ -20,7 +20,7 @@ bool isValidCoordinates(double lat, double lng) =>
 
 /// Routes geocoding through the backend to avoid Nominatim CORS issues on web.
 class GeocodingService {
-  static const _backendUrl = 'http://localhost:8000';
+  static const _backendUrl = 'https://quadagents-gdg-solution-challenge.onrender.com';
 
   static Future<GeocodingResult?> geocodeAddress(String address) async {
     final trimmed = address.trim();

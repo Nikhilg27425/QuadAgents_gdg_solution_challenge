@@ -5,9 +5,8 @@ import '../../theme.dart';
 import '../../services/firebase_service.dart';
 import '../../utils/validators.dart';
 
-/// MyTasksView — volunteer Kanban board with status update controls.
-/// Requirements 7.1, 7.2, 7.3: stream volunteer's assignments, enforce
-/// transition order via isValidTransition.
+/// MyTasksView — volunteer read-only task tracker.
+/// Status is managed exclusively by the NGO via the Task Board.
 class MyTasksView extends StatelessWidget {
   const MyTasksView({super.key});
 
@@ -93,7 +92,7 @@ class MyTasksView extends StatelessWidget {
           children: [
             Text('My Tasks', style: Theme.of(context).textTheme.displayMedium),
             const SizedBox(height: 4),
-            const Text('Track your volunteer task progress.',
+            const Text('Track your task progress. The NGO manages status updates.',
                 style: TextStyle(color: AppTheme.textGrey)),
           ],
         ),
@@ -256,20 +255,32 @@ class MyTasksView extends StatelessWidget {
               Text('Invited: $dateStr',
                   style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
 
-              if (canAdvance) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () =>
-                        _advanceStatus(context, doc.id, currentStatus),
-                    style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        textStyle: const TextStyle(fontSize: 12)),
-                    child: Text('→ ${_columnLabel(nextStatus!)}'),
-                  ),
+              // Volunteer view is read-only — no status advance buttons
+              // Only show current status badge
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _columnColor(currentStatus).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _columnColor(currentStatus).withOpacity(0.3)),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.info_outline, size: 12, color: _columnColor(currentStatus)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Status: ${_columnLabel(currentStatus)}',
+                      style: TextStyle(
+                        color: _columnColor(currentStatus),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
               if (currentStatus == 'closed') ...[
                 const SizedBox(height: 8),
@@ -278,7 +289,7 @@ class MyTasksView extends StatelessWidget {
                   decoration: BoxDecoration(
                       color: AppTheme.successGreen.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6)),
-                  child: const Text('Completed',
+                  child: const Text('✓ Completed',
                       style: TextStyle(
                           color: AppTheme.successGreen,
                           fontSize: 11,
@@ -290,62 +301,6 @@ class MyTasksView extends StatelessWidget {
         );
       },
     );
-  }
-
-  Future<void> _advanceStatus(
-      BuildContext context, String assignmentId, String currentStatus) async {
-    final next = _nextStatus(currentStatus);
-    if (next == null) return;
-
-    // Requirement 7.3: validate transition via isValidTransition
-    final error = isValidTransition(currentStatus, next);
-    if (error != null) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(error), backgroundColor: AppTheme.errorRed));
-      }
-      return;
-    }
-
-    try {
-      await FirebaseService.updateAssignmentStatus(assignmentId, next);
-
-      // Requirement 11.3: notify all parties on every status change.
-      final doc = await FirebaseFirestore.instance
-          .collection('task_assignments')
-          .doc(assignmentId)
-          .get();
-      final data = doc.data() ?? {};
-      final ngoId = data['ngoId'] as String?;
-
-      // Always notify the NGO of the status change.
-      if (ngoId != null) {
-        // Requirement 7.4: specific message when reported.
-        final title = next == 'reported'
-            ? 'Task reported for verification'
-            : 'Task status updated to ${_columnLabel(next)}';
-        final body = next == 'reported'
-            ? 'A volunteer has marked a task as reported. Please verify.'
-            : 'A volunteer has updated their task to ${_columnLabel(next)}.';
-        await FirebaseService.createNotification(ngoId, {
-          'type': 'status_change',
-          'title': title,
-          'body': body,
-          'relatedId': assignmentId,
-        });
-      }
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Status updated to ${_columnLabel(next)}'),
-            backgroundColor: AppTheme.successGreen));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'), backgroundColor: AppTheme.errorRed));
-      }
-    }
   }
 
   String? _nextStatus(String current) {

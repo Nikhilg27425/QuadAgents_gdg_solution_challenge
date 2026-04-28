@@ -53,4 +53,18 @@ class GeocodingService {
       return null;
     }
   }
+
+  /// Reverse geocode lat/lng → address via backend.
+  static Future<String?> reverseGeocode(double lat, double lng) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_backendUrl/geo/reverse?lat=$lat&lng=$lng'),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['address'] as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
 }

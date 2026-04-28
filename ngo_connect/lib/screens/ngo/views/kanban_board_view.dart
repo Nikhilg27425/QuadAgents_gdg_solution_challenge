@@ -174,6 +174,7 @@ class KanbanBoardView extends StatelessWidget {
       assignmentId: doc.id,
       volunteerId: volunteerId,
       needId: needId,
+      ngoId: ngoId,
       dateStr: dateStr,
       currentStatus: currentStatus,
       nextStatus: nextStatus,
@@ -286,6 +287,7 @@ class _AssignmentCard extends StatefulWidget {
   final String assignmentId;
   final String volunteerId;
   final String needId;
+  final String ngoId;
   final String dateStr;
   final String currentStatus;
   final String? nextStatus;
@@ -296,6 +298,7 @@ class _AssignmentCard extends StatefulWidget {
     required this.assignmentId,
     required this.volunteerId,
     required this.needId,
+    required this.ngoId,
     required this.dateStr,
     required this.currentStatus,
     required this.nextStatus,
@@ -421,7 +424,110 @@ class _AssignmentCardState extends State<_AssignmentCard> {
               ),
             ),
           ],
+          // Rate volunteer button on verified cards
+          if (widget.currentStatus == 'verified') ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _showRatingDialog(context),
+                icon: const Icon(Icons.star, size: 14),
+                label: const Text('Rate Volunteer', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    backgroundColor: AppTheme.warningOrange),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Future<void> _showRatingDialog(BuildContext context) async {
+    int selectedStars = 5;
+    final commentCtrl = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Rate Volunteer'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Volunteer: $_volunteerName',
+                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 13)),
+                Text('Task: $_needTitle',
+                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 13)),
+                const SizedBox(height: 20),
+                const Text('Stars', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final star = i + 1;
+                    return GestureDetector(
+                      onTap: () => setInner(() => selectedStars = star),
+                      child: Icon(
+                        star <= selectedStars ? Icons.star : Icons.star_border,
+                        color: AppTheme.warningOrange,
+                        size: 36,
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: commentCtrl,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Add a comment (optional)…',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                try {
+                  await FirebaseService.submitRating({
+                    'volunteerId': widget.volunteerId,
+                    'ngoId': widget.ngoId,
+                    'assignmentId': widget.assignmentId,
+                    'stars': selectedStars,
+                    'comment': commentCtrl.text.trim(),
+                  });
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Rated $_volunteerName: $selectedStars ⭐'),
+                      backgroundColor: AppTheme.successGreen,
+                    ));
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: AppTheme.errorRed,
+                    ));
+                  }
+                }
+              },
+              child: const Text('Submit Rating'),
+            ),
+          ],
+        ),
       ),
     );
   }

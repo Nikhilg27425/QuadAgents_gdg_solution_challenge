@@ -184,6 +184,13 @@ class NotificationsView extends StatelessWidget {
                             fontWeight: FontWeight.bold)),
                   ),
                 ],
+                if (type == 'rating_prompt') ...[
+                  const SizedBox(height: 8),
+                  _RateFromNotificationButton(
+                    assignmentId: d['relatedId'] as String? ?? '',
+                    notificationId: docId,
+                  ),
+                ],
               ],
             ),
           ),
@@ -226,5 +233,130 @@ class NotificationsView extends StatelessWidget {
       default:
         return Icons.notifications_outlined;
     }
+  }
+}
+
+/// Rate volunteer button shown on rating_prompt notifications.
+class _RateFromNotificationButton extends StatefulWidget {
+  final String assignmentId;
+  final String notificationId;
+  const _RateFromNotificationButton({
+    required this.assignmentId,
+    required this.notificationId,
+  });
+
+  @override
+  State<_RateFromNotificationButton> createState() =>
+      _RateFromNotificationButtonState();
+}
+
+class _RateFromNotificationButtonState
+    extends State<_RateFromNotificationButton> {
+  bool _rated = false;
+
+  Future<void> _showRatingDialog() async {
+    if (_rated) return;
+
+    // Fetch assignment to get volunteerId and ngoId
+    final doc = await FirebaseFirestore.instance
+        .collection('task_assignments')
+        .doc(widget.assignmentId)
+        .get();
+    if (!doc.exists) return;
+    final data = doc.data()!;
+    final volunteerId = data['volunteerId'] as String? ?? '';
+    final ngoId = data['ngoId'] as String? ?? '';
+
+    // Fetch volunteer name
+    final vDoc = await FirebaseFirestore.instance
+        .collection('users').doc(volunteerId).get();
+    final volunteerName = (vDoc.data() as Map<String, dynamic>?)?['name'] as String? ?? volunteerId;
+
+    int selectedStars = 5;
+    final commentCtrl = TextEditingController();
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Rate Volunteer'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Volunteer: $volunteerName',
+                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 13)),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final star = i + 1;
+                    return GestureDetector(
+                      onTap: () => setInner(() => selectedStars = star),
+                      child: Icon(
+                        star <= selectedStars ? Icons.star : Icons.star_border,
+                        color: AppTheme.warningOrange,
+                        size: 36,
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: commentCtrl,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Add a comment (optional)…',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await FirebaseService.submitRating({
+                  'volunteerId': volunteerId,
+                  'ngoId': ngoId,
+                  'assignmentId': widget.assignmentId,
+                  'stars': selectedStars,
+                  'comment': commentCtrl.text.trim(),
+                });
+                await FirebaseService.markNotificationRead(widget.notificationId);
+                if (mounted) {
+                  setState(() => _rated = true);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Rated $volunteerName: $selectedStars ⭐'),
+                    backgroundColor: AppTheme.successGreen,
+                  ));
+                }
+              },
+              child: const Text('Submit Rating'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_rated) {
+      return const Text('✓ Rated', style: TextStyle(color: AppTheme.successGreen, fontSize: 12));
+    }
+    return ElevatedButton.icon(
+      onPressed: _showRatingDialog,
+      icon: const Icon(Icons.star, size: 14),
+      label: const Text('Rate Volunteer', style: TextStyle(fontSize: 12)),
+      style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          backgroundColor: AppTheme.warningOrange),
+    );
   }
 }

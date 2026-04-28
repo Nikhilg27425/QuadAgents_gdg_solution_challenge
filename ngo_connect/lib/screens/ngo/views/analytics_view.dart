@@ -5,6 +5,8 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../../theme.dart';
 import '../../../services/firebase_service.dart';
 import 'dart:convert';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 /// AnalyticsView — live Firestore data with fl_chart charts, date range filter,
 /// and CSV export.
@@ -79,22 +81,26 @@ class _AnalyticsViewState extends State<AnalyticsView> {
     final csv = rows.map((r) => r.join(',')).join('\n');
 
     if (kIsWeb) {
-      // Web: trigger download via anchor element
       final bytes = utf8.encode(csv);
-      final blob = bytes; // simplified — actual web download needs dart:html
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-                'CSV ready (${rows.length - 1} rows). Copy from console.'),
-            backgroundColor: AppTheme.successGreen),
-      );
-      debugPrint(csv);
+      final blob = html.Blob([bytes], 'text/csv');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', 'ngo_needs_export.csv')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Downloaded ${rows.length - 1} rows as CSV.'),
+          backgroundColor: AppTheme.successGreen,
+        ));
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('CSV export is available on web.'),
-            backgroundColor: AppTheme.infoBlue),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('CSV export is only available on web.'),
+          backgroundColor: AppTheme.infoBlue,
+        ));
+      }
     }
   }
 

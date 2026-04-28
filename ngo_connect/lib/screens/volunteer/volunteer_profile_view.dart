@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'dart:js' as js;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import '../../../theme.dart';
 import '../../../services/firebase_service.dart';
 import '../../../services/geocoding_service.dart';
@@ -95,39 +96,19 @@ class _VolunteerProfileViewState extends State<VolunteerProfileView> {
   Future<void> _useCurrentLocation() async {
     setState(() => _isLocating = true);
     try {
-      // Use browser Geolocation API via dart:js
-      final completer = js.context.callMethod('eval', ['''
-        new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(
-            pos => resolve(pos.coords.latitude + "," + pos.coords.longitude),
-            err => reject(err.message)
-          );
-        })
-      ''']);
-
-      // dart:js interop — listen via callback
-      js.context['_geoResolve'] = (String coords) {
-        final parts = coords.split(',');
-        final lat = double.tryParse(parts[0]) ?? 0.0;
-        final lng = double.tryParse(parts[1]) ?? 0.0;
-        _onLocationObtained(lat, lng);
-      };
-      js.context['_geoReject'] = (String err) {
+      html.window.navigator.geolocation.getCurrentPosition().then((pos) async {
+        final lat = pos.coords!.latitude!.toDouble();
+        final lng = pos.coords!.longitude!.toDouble();
+        await _onLocationObtained(lat, lng);
+      }).catchError((e) {
         if (mounted) {
           setState(() => _isLocating = false);
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Location denied: $err'),
+            content: Text('Location denied: $e'),
             backgroundColor: AppTheme.warningOrange,
           ));
         }
-      };
-
-      js.context.callMethod('eval', ['''
-        navigator.geolocation.getCurrentPosition(
-          function(pos) { window._geoResolve(pos.coords.latitude + "," + pos.coords.longitude); },
-          function(err) { window._geoReject(err.message); }
-        );
-      ''']);
+      });
     } catch (e) {
       if (mounted) {
         setState(() => _isLocating = false);

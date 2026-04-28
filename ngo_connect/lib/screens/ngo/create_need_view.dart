@@ -98,36 +98,31 @@ class _CreateNeedViewState extends State<CreateNeedView> {
         'sizeBytes': file.bytes!.length,
       });
 
-      // Extract text from file bytes and send to AI
-      String rawText = '';
+      // Extract text from file — send to backend for proper parsing
+      setState(() { _isUploading = false; _isExtracting = true; });
+
+      List<Map<String, dynamic>> needs = [];
       if (lower.endsWith('.csv')) {
-        rawText = String.fromCharCodes(file.bytes!);
+        final rawText = String.fromCharCodes(file.bytes!);
+        needs = await MatchingService.extractNeedsFromText(rawText);
       } else {
-        // For PDF: send raw bytes as latin1 string — backend handles extraction
-        rawText = String.fromCharCodes(file.bytes!.take(8000));
+        // PDF: send to backend /match/extract-file for proper text extraction
+        needs = await MatchingService.extractNeedsFromFile(file.bytes!, file.name);
       }
 
-      if (rawText.isNotEmpty) {
-        setState(() { _isUploading = false; _isExtracting = true; });
-        final needs = await MatchingService.extractNeedsFromText(
-            'File: ${file.name}\n\n$rawText');
-        if (mounted) {
-          setState(() {
-            _extractedNeeds = needs;
-            _isExtracting = false;
-          });
-          if (needs.isNotEmpty) {
-            _prefillFromExtracted(needs.first);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('${needs.length} need(s) extracted from ${file.name}'),
-              backgroundColor: AppTheme.successGreen,
-            ));
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('No needs found in the file. Fill the form manually.'),
-              backgroundColor: AppTheme.warningOrange,
-            ));
-          }
+      if (mounted) {
+        setState(() { _extractedNeeds = needs; _isExtracting = false; });
+        if (needs.isNotEmpty) {
+          _prefillFromExtracted(needs.first);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${needs.length} need(s) extracted from ${file.name}'),
+            backgroundColor: AppTheme.successGreen,
+          ));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No needs found in the file. Fill the form manually.'),
+            backgroundColor: AppTheme.warningOrange,
+          ));
         }
       }
     } catch (e) {

@@ -1,7 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File
 from pydantic import BaseModel
 from services.gemini_service import match_volunteer_to_needs, extract_needs_from_text, prioritize_needs
-import json
+import io
 
 router = APIRouter()
 
@@ -34,4 +34,31 @@ async def prioritize_needs_route():
 @router.post("/parse-text")
 async def parse_text(request: ParseTextRequest):
     needs = await extract_needs_from_text(request.text)
+    return {"needs": needs}
+
+@router.post("/extract-file")
+async def extract_file(file: UploadFile = File(...)):
+    """Extract needs from an uploaded PDF or CSV file."""
+    content = await file.read()
+    filename = file.filename or ""
+    raw_text = ""
+
+    if filename.lower().endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content))
+            pages = [page.extract_text() or "" for page in reader.pages]
+            raw_text = "\n".join(pages).strip()
+        except Exception as e:
+            return {"needs": [], "error": f"PDF read error: {e}"}
+    else:
+        try:
+            raw_text = content.decode("utf-8", errors="ignore")
+        except Exception:
+            raw_text = content.decode("latin-1", errors="ignore")
+
+    if not raw_text:
+        return {"needs": [], "error": "Could not extract text from file."}
+
+    needs = await extract_needs_from_text(raw_text[:6000])
     return {"needs": needs}

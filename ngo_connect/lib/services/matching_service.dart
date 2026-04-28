@@ -112,6 +112,25 @@ class MatchingService {
     return [];
   }
 
+  // File parser — send PDF/CSV bytes to backend for proper text extraction + AI
+  static Future<List<Map<String, dynamic>>> extractNeedsFromFile(
+      List<int> bytes, String filename) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_backendUrl/match/extract-file'),
+      );
+      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['needs'] ?? []);
+      }
+    } catch (_) {}
+    return [];
+  }
+
   // ── Pure scoring functions ─────────────────────────────────────────────────
 
   /// Skill overlap: Jaccard similarity × 100, result in [0, 100].

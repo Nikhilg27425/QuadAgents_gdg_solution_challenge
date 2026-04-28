@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme.dart';
 import 'views/ngo_overview_view.dart';
-import 'doc_upload_view.dart';
 import 'create_need_view.dart';
 import 'views/needs_management_view.dart';
 import 'views/kanban_board_view.dart';
@@ -21,12 +20,11 @@ class _NgoDashboardState extends State<NgoDashboard> {
 
   final _navItems = const [
     _NavItem(Icons.dashboard_outlined, 'Overview', 0),
-    _NavItem(Icons.upload_file_outlined, 'Documents', 1),
-    _NavItem(Icons.add_circle_outline, 'Create Need', 2),
-    _NavItem(Icons.list_alt_outlined, 'Manage Needs', 3),
-    _NavItem(Icons.view_kanban_outlined, 'Task Board', 4),
-    _NavItem(Icons.bar_chart_outlined, 'Analytics', 5),
-    _NavItem(Icons.notifications_outlined, 'Notifications', 6),
+    _NavItem(Icons.add_circle_outline, 'Create Need', 1),
+    _NavItem(Icons.list_alt_outlined, 'Manage Needs', 2),
+    _NavItem(Icons.view_kanban_outlined, 'Task Board', 3),
+    _NavItem(Icons.bar_chart_outlined, 'Analytics', 4),
+    _NavItem(Icons.notifications_outlined, 'Notifications', 5),
   ];
 
   Widget _buildCurrentView() {
@@ -35,16 +33,14 @@ class _NgoDashboardState extends State<NgoDashboard> {
       case 0:
         return NgoOverviewView(ngoId: uid);
       case 1:
-        return DocUploadView(ngoId: uid);
-      case 2:
         return CreateNeedView(ngoId: uid);
-      case 3:
+      case 2:
         return NeedsManagementView(ngoId: uid);
-      case 4:
+      case 3:
         return KanbanBoardView(ngoId: uid);
-      case 5:
+      case 4:
         return AnalyticsView(ngoId: uid);
-      case 6:
+      case 5:
         return NotificationsView(uid: uid);
       default:
         return NgoOverviewView(ngoId: uid);

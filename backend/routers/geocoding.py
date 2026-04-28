@@ -25,7 +25,6 @@ async def geocode(q: str):
     if not features:
         return {"results": []}
 
-    # Normalize to Nominatim-style response for Flutter compatibility
     results = []
     for f in features:
         coords = f.get("geometry", {}).get("coordinates", [])
@@ -43,3 +42,32 @@ async def geocode(q: str):
             })
 
     return {"results": results}
+
+
+@router.get("/reverse")
+async def reverse_geocode(lat: float, lng: float):
+    """Reverse geocode lat/lng → address using Photon."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://photon.komoot.io/reverse",
+            params={"lat": lat, "lon": lng, "limit": 1, "lang": "en"},
+            headers={"User-Agent": "NGOConnectApp/1.0"},
+            timeout=10,
+        )
+
+    if resp.status_code != 200:
+        return {"address": None}
+
+    data = resp.json()
+    features = data.get("features", [])
+    if not features:
+        return {"address": None}
+
+    props = features[0].get("properties", {})
+    address = ", ".join(filter(None, [
+        props.get("name"),
+        props.get("city") or props.get("town") or props.get("village"),
+        props.get("state"),
+        props.get("country"),
+    ]))
+    return {"address": address or None}

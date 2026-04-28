@@ -77,6 +77,28 @@ class _TaskDetailViewState extends State<TaskDetailView> {
       // Advance to accepted
       await FirebaseService.updateAssignmentStatus(assignmentId, 'accepted');
 
+      // Requirement 8.1: auto-create chat room when 2+ volunteers are assigned.
+      // Fetch all accepted/in-progress assignments for this need.
+      final assignmentsSnap = await FirebaseService
+          .getAssignmentsStream(needId: widget.need.id)
+          .first;
+      final acceptedVolunteers = assignmentsSnap.docs
+          .where((d) {
+            final s = (d.data() as Map<String, dynamic>)['status'] as String? ?? '';
+            return ['accepted', 'in-progress', 'reported', 'verified'].contains(s);
+          })
+          .map((d) => (d.data() as Map<String, dynamic>)['volunteerId'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList();
+
+      // Always include current volunteer and NGO coordinator in the room.
+      final participants = {...acceptedVolunteers, uid, widget.need.ngoId}.toList();
+
+      if (participants.length >= 2) {
+        // Use needId as the chat room id so all volunteers share the same room.
+        await FirebaseService.ensureChatRoom(widget.need.id, participants);
+      }
+
       // Notify NGO admin (Requirement 6.2)
       await FirebaseService.createNotification(widget.need.ngoId, {
         'type': 'assignment',

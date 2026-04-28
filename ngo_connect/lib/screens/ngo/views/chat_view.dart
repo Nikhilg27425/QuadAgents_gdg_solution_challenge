@@ -42,9 +42,7 @@ class _ChatViewState extends State<ChatView> {
       FirebaseAuth.instance.currentUser?.uid ?? '';
 
   String get _currentName =>
-      FirebaseAuth.instance.currentUser?.displayName ??
-      FirebaseAuth.instance.currentUser?.email ??
-      'Volunteer';
+      FirebaseAuth.instance.currentUser?.displayName ?? '';
 
   @override
   void initState() {
@@ -93,9 +91,31 @@ class _ChatViewState extends State<ChatView> {
 
     _msgController.clear();
 
+    // Fetch name from Firestore profile (more reliable than displayName)
+    String senderName = _currentName;
+    if (senderName.isEmpty) {
+      final profile = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUid)
+          .get();
+      senderName = (profile.data() as Map<String, dynamic>?)?['name']
+              as String? ??
+          'User';
+      // Also check ngos collection
+      if (senderName == 'User') {
+        final ngoProfile = await FirebaseFirestore.instance
+            .collection('ngos')
+            .doc(_currentUid)
+            .get();
+        senderName = (ngoProfile.data() as Map<String, dynamic>?)?['name']
+                as String? ??
+            'User';
+      }
+    }
+
     await FirebaseService.sendMessage(widget.taskId, {
       'senderUid': _currentUid,
-      'senderName': _currentName,
+      'senderName': senderName,
       'text': trimmed,
     });
   }
@@ -252,11 +272,15 @@ class _ChatViewState extends State<ChatView> {
 
   Widget _buildMessageBubble(Map<String, dynamic> data, bool isMine) {
     final text = data['text'] as String? ?? '';
-    final senderName = data['senderName'] as String? ?? 'Unknown';
+    final rawSenderName = data['senderName'] as String? ?? 'Unknown';
+    final senderUid = data['senderUid'] as String? ?? '';
     final sentAt = (data['sentAt'] as Timestamp?)?.toDate();
     final timeStr = sentAt != null
         ? '${sentAt.hour.toString().padLeft(2, '0')}:${sentAt.minute.toString().padLeft(2, '0')}'
         : '';
+
+    // If senderName looks like an email, resolve the real name from Firestore
+    final isEmail = rawSenderName.contains('@');
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -270,13 +294,29 @@ class _ChatViewState extends State<ChatView> {
             if (!isMine)
               Padding(
                 padding: const EdgeInsets.only(left: 4, bottom: 2),
-                child: Text(
-                  senderName,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textGrey,
-                      fontWeight: FontWeight.w600),
-                ),
+                child: isEmail && senderUid.isNotEmpty
+                    ? FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(senderUid)
+                            .get(),
+                        builder: (context, snap) {
+                          final name =
+                              (snap.data?.data() as Map<String, dynamic>?)?['name']
+                                  as String? ??
+                              rawSenderName;
+                          return Text(name,
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.textGrey,
+                                  fontWeight: FontWeight.w600));
+                        },
+                      )
+                    : Text(rawSenderName,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textGrey,
+                            fontWeight: FontWeight.w600)),
               ),
             Container(
               padding:

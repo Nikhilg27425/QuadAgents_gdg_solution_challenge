@@ -3,14 +3,13 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:ngo_connect/utils/validators.dart' show computeRatingBonus;
 import 'dart:convert';
 import 'dart:math' as math;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class MatchingService {
   static final _db = FirebaseFirestore.instance;
   static final _model = GenerativeModel(
-  model: 'gemini-1.5-flash',
-  apiKey: dotenv.env['GEMINI_API_KEY'] ?? '',
-);
+    model: 'gemini-1.0-pro',
+    apiKey: 'AIzaSyDy_2RYm6gUH2W-JvmLheSV6j21cun9iQ8',
+  );
 
   // Rule-based + Gemini re-ranked matching: volunteer → open needs
   static Future<List<Map<String, dynamic>>> matchVolunteerToNeeds(

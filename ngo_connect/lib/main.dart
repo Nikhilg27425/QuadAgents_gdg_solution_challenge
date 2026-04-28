@@ -8,18 +8,11 @@ import 'screens/landing_page.dart';
 import 'screens/ngo/ngo_dashboard.dart';
 import 'screens/volunteer/volunteer_dashboard.dart';
 import 'firebase_options.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
-  print('KEY: ${dotenv.env['GEMINI_API_KEY']}'); // remove after confirming
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(
-    const ProviderScope(
-      child: NgoConnectApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: NgoConnectApp()));
 }
 
 class NgoConnectApp extends StatelessWidget {
@@ -36,60 +29,54 @@ class NgoConnectApp extends StatelessWidget {
   }
 }
 
-/// Listens to Firebase Auth state and routes to the correct screen.
-/// On refresh, Firebase restores the session automatically — this widget
-/// waits for that and then routes to the right dashboard instead of
-/// always showing the landing page.
-class _AuthGate extends StatelessWidget {
+/// Stateful auth gate — caches the role so page refreshes don't reset to landing.
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
 
   @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  String? _cachedRole;
+  String? _cachedUid;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    FirebaseAuth.instance.authStateChanges().listen((user) async {
+      if (user == null) {
+        if (mounted) setState(() { _cachedRole = null; _cachedUid = null; _loading = false; });
+        return;
+      }
+      // Only re-fetch role if uid changed
+      if (user.uid == _cachedUid && _cachedRole != null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final role = (doc.data() as Map<String, dynamic>?)?['role'] as String?;
+      if (mounted) {
+        setState(() {
+          _cachedUid = user.uid;
+          _cachedRole = role;
+          _loading = false;
+        });
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, authSnap) {
-        // Still waiting for Firebase to restore session
-        if (authSnap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final user = authSnap.data;
-
-        // Not logged in — show landing page
-        if (user == null) {
-          return const LandingPage();
-        }
-
-        // Logged in — fetch role and route to correct dashboard
-        return FutureBuilder<DocumentSnapshot>(
-          future: FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get(),
-          builder: (context, userSnap) {
-            if (userSnap.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            final role =
-                (userSnap.data?.data() as Map<String, dynamic>?)?['role']
-                    as String?;
-
-            if (role == 'ngo') {
-              return const NgoDashboard();
-            } else if (role == 'volunteer') {
-              return const VolunteerDashboard();
-            }
-
-            // Unknown role — fall back to landing page
-            return const LandingPage();
-          },
-        );
-      },
-    );
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_cachedRole == 'ngo') return const NgoDashboard();
+    if (_cachedRole == 'volunteer') return const VolunteerDashboard();
+    return const LandingPage();
   }
 }

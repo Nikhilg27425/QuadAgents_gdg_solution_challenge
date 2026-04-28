@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme.dart';
+import '../../screens/landing_page.dart';
 import 'volunteer_profile_view.dart';
 import 'explore_needs_view.dart';
 import 'my_tasks_view.dart';
@@ -18,6 +19,32 @@ class VolunteerDashboard extends StatefulWidget {
 
 class _VolunteerDashboardState extends State<VolunteerDashboard> {
   int _selectedIndex = 1;
+  String _userName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadName();
+  }
+
+  Future<void> _loadName() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final profile = await FirebaseService.getUserProfile(uid);
+    if (mounted) {
+      setState(() => _userName = profile?['name'] as String? ?? '');
+    }
+  }
+
+  Future<void> _logout() async {
+    await FirebaseAuth.instance.signOut();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LandingPage()),
+        (route) => false,
+      );
+    }
+  }
 
   Widget _buildCurrentView() {
     switch (_selectedIndex) {
@@ -28,10 +55,8 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
       case 2:
         return const MyTasksView();
       case 3:
-        return const _VolunteerChatRoomsView();
-      case 4:
         return const VolunteerProfileView();
-      case 5:
+      case 4:
         final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
         return NotificationsView(uid: uid);
       default:
@@ -84,14 +109,12 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
                   padding: const EdgeInsets.all(6),
                   decoration: const BoxDecoration(
                       color: AppTheme.primaryPurple, shape: BoxShape.circle),
-                  child: const Icon(Icons.show_chart,
-                      color: Colors.white, size: 20),
+                  child: const Icon(Icons.show_chart, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Text('NGO Connect',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppTheme.primaryPurple,
-                        fontWeight: FontWeight.bold)),
+                        color: AppTheme.primaryPurple, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -99,29 +122,35 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
           _sidebarItem(Icons.dashboard_outlined, 'Dashboard', 0),
           _sidebarItem(Icons.search, 'Explore Needs', 1),
           _sidebarItem(Icons.assignment_outlined, 'My Tasks', 2),
-          _sidebarItem(Icons.chat_bubble_outline, 'Chat', 3),
-          _sidebarItem(Icons.person_outline, 'My Profile', 4),
-          _sidebarItem(Icons.notifications_none, 'Notifications', 5),
+          _sidebarItem(Icons.person_outline, 'My Profile', 3),
+          _sidebarItem(Icons.notifications_none, 'Notifications', 4),
           const Spacer(),
-          _sidebarItem(Icons.logout, 'Logout', 99,
-              color: AppTheme.errorRed),
+          InkWell(
+            onTap: _logout,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: const Row(
+                children: [
+                  Icon(Icons.logout, color: AppTheme.errorRed, size: 20),
+                  SizedBox(width: 12),
+                  Text('Logout',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w500, color: AppTheme.errorRed)),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  Widget _sidebarItem(IconData icon, String title, int index,
-      {Color? color}) {
+  Widget _sidebarItem(IconData icon, String title, int index) {
     final isSelected = _selectedIndex == index;
     return InkWell(
-      onTap: () {
-        if (index == 99) {
-          FirebaseService.logout();
-          return;
-        }
-        setState(() => _selectedIndex = index);
-      },
+      onTap: () => setState(() => _selectedIndex = index),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -136,18 +165,13 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
         child: Row(
           children: [
             Icon(icon,
-                color: color ??
-                    (isSelected
-                        ? AppTheme.primaryPurple
-                        : AppTheme.textDark),
+                color: isSelected ? AppTheme.primaryPurple : AppTheme.textDark,
                 size: 20),
             const SizedBox(width: 12),
             Text(title,
                 style: TextStyle(
-                    fontWeight: isSelected
-                        ? FontWeight.w600
-                        : FontWeight.w500,
-                    color: color ?? AppTheme.textDark)),
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: AppTheme.textDark)),
           ],
         ),
       ),
@@ -155,6 +179,7 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
   }
 
   Widget _buildTopBar() {
+    final displayName = _userName.isNotEmpty ? _userName : 'Volunteer';
     return Container(
       height: 72,
       padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -169,11 +194,19 @@ class _VolunteerDashboardState extends State<VolunteerDashboard> {
           const Text('Volunteer Portal',
               style: TextStyle(fontWeight: FontWeight.w600)),
           const Spacer(),
-          const CircleAvatar(
+          Text(displayName,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600, color: AppTheme.textDark)),
+          const SizedBox(width: 12),
+          CircleAvatar(
             backgroundColor: AppTheme.primaryPurple,
             radius: 18,
-            child: Icon(Icons.person, color: Colors.white, size: 20),
-          )
+            child: Text(
+              displayName.isNotEmpty ? displayName[0].toUpperCase() : 'V',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ),
     );
@@ -187,37 +220,40 @@ class _VolunteerOverviewView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Welcome back!',
-            style: Theme.of(context).textTheme.displayMedium),
-        const SizedBox(height: 4),
-        const Text('Here\'s a summary of your volunteer activity.',
-            style: TextStyle(color: AppTheme.textGrey)),
-        const SizedBox(height: 32),
-        if (uid != null) _buildLiveStats(uid),
-      ],
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: uid != null ? FirebaseService.getUserProfile(uid) : null,
+      builder: (context, profileSnap) {
+        final name = profileSnap.data?['name'] as String? ?? 'Volunteer';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Welcome back, $name!',
+                style: Theme.of(context).textTheme.displayMedium),
+            const SizedBox(height: 4),
+            const Text("Here's a summary of your volunteer activity.",
+                style: TextStyle(color: AppTheme.textGrey)),
+            const SizedBox(height: 32),
+            if (uid != null) _buildLiveStats(uid),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildLiveStats(String uid) {
-    return FutureBuilder<Map<String, dynamic>?>(
+    return FutureBuilder<Map<String, dynamic>>(
       future: _fetchStats(uid),
       builder: (context, snap) {
         final stats = snap.data ?? {};
         return Row(
           children: [
-            _statCard(context, Icons.assignment_outlined,
-                AppTheme.primaryPurple, 'Active Tasks',
-                '${stats['activeTasks'] ?? 0}'),
+            _statCard(context, Icons.assignment_outlined, AppTheme.primaryPurple,
+                'Active Tasks', '${stats['activeTasks'] ?? 0}'),
             const SizedBox(width: 16),
-            _statCard(context, Icons.check_circle_outline,
-                AppTheme.successGreen, 'Completed',
-                '${stats['completed'] ?? 0}'),
+            _statCard(context, Icons.check_circle_outline, AppTheme.successGreen,
+                'Completed', '${stats['completed'] ?? 0}'),
             const SizedBox(width: 16),
-            _statCard(context, Icons.star, AppTheme.warningOrange,
-                'Avg Rating',
+            _statCard(context, Icons.star, AppTheme.warningOrange, 'Avg Rating',
                 stats['avgRating'] != null
                     ? (stats['avgRating'] as double).toStringAsFixed(1)
                     : '—'),
@@ -229,14 +265,12 @@ class _VolunteerOverviewView extends StatelessWidget {
 
   Future<Map<String, dynamic>> _fetchStats(String uid) async {
     final profile = await FirebaseService.getUserProfile(uid);
-    final assignmentsSnap = await FirebaseService.getAssignmentsStream(
-            volunteerId: uid)
-        .first;
+    final assignmentsSnap =
+        await FirebaseService.getAssignmentsStream(volunteerId: uid).first;
     final docs = assignmentsSnap.docs;
     final active = docs
-        .where((d) =>
-            !['closed', 'declined'].contains(
-                (d.data() as Map<String, dynamic>)['status']))
+        .where((d) => !['closed', 'declined']
+            .contains((d.data() as Map<String, dynamic>)['status']))
         .length;
     final completed = docs
         .where((d) =>
@@ -263,8 +297,8 @@ class _VolunteerOverviewView extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                  color: color.withOpacity(0.1), shape: BoxShape.circle),
+              decoration:
+                  BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
               child: Icon(icon, color: color, size: 20),
             ),
             const SizedBox(width: 12),
@@ -272,8 +306,7 @@ class _VolunteerOverviewView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(
-                        fontSize: 11, color: AppTheme.textGrey)),
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
                 Text(value,
                     style: const TextStyle(
                         fontSize: 22,
@@ -288,20 +321,15 @@ class _VolunteerOverviewView extends StatelessWidget {
   }
 }
 
-/// Shows the volunteer's chat rooms (one per assigned task) and lets them
-/// open a specific room's ChatView.
-///
-/// Requirements 8.1–8.5: lists chat rooms where the volunteer is a participant.
+/// Chat rooms list for volunteers.
 class _VolunteerChatRoomsView extends StatefulWidget {
   const _VolunteerChatRoomsView();
 
   @override
-  State<_VolunteerChatRoomsView> createState() =>
-      _VolunteerChatRoomsViewState();
+  State<_VolunteerChatRoomsView> createState() => _VolunteerChatRoomsViewState();
 }
 
 class _VolunteerChatRoomsViewState extends State<_VolunteerChatRoomsView> {
-  /// Currently selected room id, or null when showing the room list.
   String? _selectedRoomId;
   String? _selectedRoomTitle;
 
@@ -314,8 +342,7 @@ class _VolunteerChatRoomsViewState extends State<_VolunteerChatRoomsView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TextButton.icon(
-            onPressed: () =>
-                setState(() => _selectedRoomId = null),
+            onPressed: () => setState(() => _selectedRoomId = null),
             icon: const Icon(Icons.arrow_back),
             label: const Text('Back to rooms'),
           ),
@@ -334,14 +361,12 @@ class _VolunteerChatRoomsViewState extends State<_VolunteerChatRoomsView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Group Chats',
-            style: Theme.of(context).textTheme.displayMedium),
+        Text('Group Chats', style: Theme.of(context).textTheme.displayMedium),
         const SizedBox(height: 4),
         const Text('Chat rooms for your assigned tasks.',
             style: TextStyle(color: AppTheme.textGrey)),
         const SizedBox(height: 24),
         StreamBuilder<QuerySnapshot>(
-          // Query chat rooms where this volunteer is a participant.
           stream: FirebaseFirestore.instance
               .collection('chat_rooms')
               .where('participantIds', arrayContains: _uid)
@@ -352,7 +377,28 @@ class _VolunteerChatRoomsViewState extends State<_VolunteerChatRoomsView> {
             }
             final rooms = snap.data?.docs ?? [];
             if (rooms.isEmpty) {
-              return _buildEmptyState(context);
+              return Container(
+                padding: const EdgeInsets.all(48),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.borderGrey)),
+                child: const Column(
+                  children: [
+                    Icon(Icons.chat_bubble_outline,
+                        size: 48, color: AppTheme.textGrey),
+                    SizedBox(height: 16),
+                    Text('No chat rooms yet',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: AppTheme.textDark)),
+                    SizedBox(height: 8),
+                    Text(
+                        'Accept a task to join its group chat.',
+                        style: TextStyle(color: AppTheme.textGrey),
+                        textAlign: TextAlign.center),
+                  ],
+                ),
+              );
             }
             return ListView.separated(
               shrinkWrap: true,
@@ -378,56 +424,22 @@ class _VolunteerChatRoomsViewState extends State<_VolunteerChatRoomsView> {
       ],
     );
   }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(48),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.borderGrey)),
-      child: Column(
-        children: [
-          const Icon(Icons.chat_bubble_outline,
-              size: 48, color: AppTheme.textGrey),
-          const SizedBox(height: 16),
-          Text('No chat rooms yet',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(color: AppTheme.textDark)),
-          const SizedBox(height: 8),
-          const Text(
-              'Chat rooms are created when 2+ volunteers are assigned to the same task.',
-              style: TextStyle(color: AppTheme.textGrey),
-              textAlign: TextAlign.center),
-        ],
-      ),
-    );
-  }
 }
 
-/// A card representing a single chat room, fetching the need title for display.
 class _RoomCard extends StatelessWidget {
   final String roomId;
   final String needId;
   final void Function(String title) onTap;
 
-  const _RoomCard({
-    required this.roomId,
-    required this.needId,
-    required this.onTap,
-  });
+  const _RoomCard({required this.roomId, required this.needId, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<DocumentSnapshot>(
-      future:
-          FirebaseFirestore.instance.collection('needs').doc(needId).get(),
+      future: FirebaseFirestore.instance.collection('needs').doc(needId).get(),
       builder: (context, snap) {
         final data = snap.data?.data() as Map<String, dynamic>?;
         final title = data?['title'] as String? ?? 'Task $needId';
-
         return InkWell(
           onTap: () => onTap(title),
           borderRadius: BorderRadius.circular(12),
@@ -458,10 +470,9 @@ class _RoomCard extends StatelessWidget {
                           style: const TextStyle(
                               fontWeight: FontWeight.w600, fontSize: 14)),
                       const SizedBox(height: 2),
-                      Text('Room: $roomId',
-                          style: const TextStyle(
-                              fontSize: 11, color: AppTheme.textGrey),
-                          overflow: TextOverflow.ellipsis),
+                      const Text('Tap to open chat',
+                          style: TextStyle(
+                              fontSize: 11, color: AppTheme.textGrey)),
                     ],
                   ),
                 ),

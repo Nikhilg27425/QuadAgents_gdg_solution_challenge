@@ -4,10 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme.dart';
 import '../../services/firebase_service.dart';
 import '../../utils/validators.dart';
+import '../ngo/views/chat_view.dart';
 
 /// MyTasksView — volunteer Kanban board with status update controls.
-/// Requirements 7.1, 7.2, 7.3: stream volunteer's assignments, enforce
-/// transition order via isValidTransition.
+/// Requirements 7.1, 7.2, 7.3
 class MyTasksView extends StatelessWidget {
   const MyTasksView({super.key});
 
@@ -23,9 +23,7 @@ class MyTasksView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      return const Center(child: Text('Not logged in'));
-    }
+    if (uid == null) return const Center(child: Text('Not logged in'));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -44,15 +42,12 @@ class MyTasksView extends StatelessWidget {
             }
 
             final docs = snap.data?.docs ?? [];
-
-            // Filter out declined assignments
             final activeDocs = docs.where((doc) {
               final status =
                   (doc.data() as Map<String, dynamic>)['status'] as String? ?? '';
               return status != 'declined';
             }).toList();
 
-            // Group by status
             final grouped = <String, List<QueryDocumentSnapshot>>{};
             for (final col in _columns) {
               grouped[col] = [];
@@ -64,17 +59,15 @@ class MyTasksView extends StatelessWidget {
               grouped[status]?.add(doc);
             }
 
-            if (activeDocs.isEmpty) {
-              return _buildEmptyState(context);
-            }
+            if (activeDocs.isEmpty) return _buildEmptyState(context);
 
             return SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: _columns.map((col) {
-                  return _buildColumn(context, col, grouped[col] ?? []);
-                }).toList(),
+                children: _columns
+                    .map((col) => _buildColumn(context, col, grouped[col] ?? []))
+                    .toList(),
               ),
             );
           },
@@ -85,18 +78,13 @@ class MyTasksView extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('My Tasks', style: Theme.of(context).textTheme.displayMedium),
-            const SizedBox(height: 4),
-            const Text('Track your volunteer task progress.',
-                style: TextStyle(color: AppTheme.textGrey)),
-          ],
-        ),
+        Text('My Tasks', style: Theme.of(context).textTheme.displayMedium),
+        const SizedBox(height: 4),
+        const Text('Track your volunteer task progress.',
+            style: TextStyle(color: AppTheme.textGrey)),
       ],
     );
   }
@@ -110,7 +98,6 @@ class MyTasksView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Column header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
@@ -127,7 +114,8 @@ class MyTasksView extends StatelessWidget {
                         BoxDecoration(color: color, shape: BoxShape.circle)),
                 const SizedBox(width: 8),
                 Text(_columnLabel(status),
-                    style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, color: color)),
                 const Spacer(),
                 Container(
                   padding:
@@ -145,8 +133,6 @@ class MyTasksView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
-          // Cards
           if (docs.isEmpty)
             Container(
               padding: const EdgeInsets.all(16),
@@ -167,7 +153,7 @@ class MyTasksView extends StatelessWidget {
   Widget _taskCard(BuildContext context, QueryDocumentSnapshot doc,
       String currentStatus) {
     final d = doc.data() as Map<String, dynamic>;
-    final needId = d['needId'] as String? ?? '—';
+    final needId = d['needId'] as String? ?? '';
     final invitedAt = d['invitedAt'];
     String dateStr = '—';
     if (invitedAt is Timestamp) {
@@ -177,6 +163,8 @@ class MyTasksView extends StatelessWidget {
 
     final nextStatus = _nextStatus(currentStatus);
     final canAdvance = nextStatus != null && currentStatus != 'closed';
+    final showChat = ['accepted', 'in-progress', 'reported', 'verified']
+        .contains(currentStatus);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -204,20 +192,14 @@ class MyTasksView extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  'Need: ${needId.length > 12 ? '${needId.substring(0, 12)}…' : needId}',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13),
-                ),
+                child: _buildNeedTitle(needId),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text('Invited: $dateStr',
-              style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
-          const SizedBox(height: 4),
-          _buildNeedTitle(needId),
-
+              style:
+                  const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
           if (canAdvance) ...[
             const SizedBox(height: 12),
             SizedBox(
@@ -232,11 +214,25 @@ class MyTasksView extends StatelessWidget {
               ),
             ),
           ],
-
+          if (showChat) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openChat(context, needId),
+                icon: const Icon(Icons.chat_bubble_outline, size: 14),
+                label: const Text('Group Chat',
+                    style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8)),
+              ),
+            ),
+          ],
           if (currentStatus == 'closed') ...[
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                   color: AppTheme.successGreen.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6)),
@@ -254,16 +250,31 @@ class MyTasksView extends StatelessWidget {
 
   Widget _buildNeedTitle(String needId) {
     return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('needs').doc(needId).get(),
+      future:
+          FirebaseFirestore.instance.collection('needs').doc(needId).get(),
       builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox.shrink();
         final data = snap.data?.data() as Map<String, dynamic>?;
         final title = data?['title'] as String? ?? needId;
         return Text(title,
-            style: const TextStyle(fontSize: 12, color: AppTheme.textDark),
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13),
             maxLines: 2,
             overflow: TextOverflow.ellipsis);
       },
+    );
+  }
+
+  void _openChat(BuildContext context, String needId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SizedBox(
+          width: 600,
+          height: 500,
+          child: ChatView(taskId: needId, taskTitle: 'Group Chat'),
+        ),
+      ),
     );
   }
 
@@ -272,12 +283,11 @@ class MyTasksView extends StatelessWidget {
     final next = _nextStatus(currentStatus);
     if (next == null) return;
 
-    // Requirement 7.3: validate transition via isValidTransition
     final error = isValidTransition(currentStatus, next);
     if (error != null) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(error), backgroundColor: AppTheme.errorRed));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error), backgroundColor: AppTheme.errorRed));
       }
       return;
     }
@@ -285,7 +295,6 @@ class MyTasksView extends StatelessWidget {
     try {
       await FirebaseService.updateAssignmentStatus(assignmentId, next);
 
-      // Requirement 11.3: notify all parties on every status change.
       final doc = await FirebaseFirestore.instance
           .collection('task_assignments')
           .doc(assignmentId)
@@ -293,19 +302,15 @@ class MyTasksView extends StatelessWidget {
       final data = doc.data() ?? {};
       final ngoId = data['ngoId'] as String?;
 
-      // Always notify the NGO of the status change.
       if (ngoId != null) {
-        // Requirement 7.4: specific message when reported.
-        final title = next == 'reported'
-            ? 'Task reported for verification'
-            : 'Task status updated to ${_columnLabel(next)}';
-        final body = next == 'reported'
-            ? 'A volunteer has marked a task as reported. Please verify.'
-            : 'A volunteer has updated their task to ${_columnLabel(next)}.';
         await FirebaseService.createNotification(ngoId, {
           'type': 'status_change',
-          'title': title,
-          'body': body,
+          'title': next == 'reported'
+              ? 'Task reported for verification'
+              : 'Task status updated to ${_columnLabel(next)}',
+          'body': next == 'reported'
+              ? 'A volunteer has marked a task as reported. Please verify.'
+              : 'A volunteer updated their task to ${_columnLabel(next)}.',
           'relatedId': assignmentId,
         });
       }
@@ -318,7 +323,8 @@ class MyTasksView extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'), backgroundColor: AppTheme.errorRed));
+            content: Text('Error: $e'),
+            backgroundColor: AppTheme.errorRed));
       }
     }
   }
@@ -366,7 +372,8 @@ class MyTasksView extends StatelessWidget {
           border: Border.all(color: AppTheme.borderGrey)),
       child: Column(
         children: [
-          const Icon(Icons.assignment_outlined, size: 48, color: AppTheme.textGrey),
+          const Icon(Icons.assignment_outlined,
+              size: 48, color: AppTheme.textGrey),
           const SizedBox(height: 16),
           Text('No tasks yet',
               style: Theme.of(context)
